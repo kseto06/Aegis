@@ -1,3 +1,5 @@
+.DS_Store
+
 # Don't commit the dataset
 model/dataset/labels/*.txt
 model/dataset/images/*.jpg
