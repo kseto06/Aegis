@@ -11,7 +11,6 @@ from sklearn.model_selection import train_test_split
 
 import colorsys
 from PIL import Image, ImageFont, ImageDraw
-import imghdr
 
 from ultralytics import YOLO
 
@@ -20,7 +19,7 @@ import cv2
 
 class YOLO_Detection():
     def __init__(self, model_path: str='yolo/yolo11n.pt'):
-        self.CLASSES: list[str] = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light',
+        self.CLASSES: list[str] = ['cyclist', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light',
            'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
            'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee',
            'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard',
@@ -28,7 +27,7 @@ class YOLO_Detection():
            'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch',
            'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone',
            'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear',
-           'hair drier', 'toothbrush']
+           'hair drier', 'toothbrush'] #Custom cyclist class + default COCO 80 classes
         
         self.model = YOLO(model_path)
 
@@ -106,7 +105,7 @@ class YOLO_Detection():
 
 class Inference(): 
     # Pass in a yolo class and model path
-    def __init__(self, yolo: Type[object], model_path: str = 'yolo/yolo11s.onnx'):
+    def __init__(self, yolo: Type[object], model_path: str):
         self.yolo = yolo
         self.model = YOLO(model_path)
         self.CLASSES = yolo.CLASSES
@@ -136,7 +135,7 @@ class Inference():
             scores: np.ndarray = prediction[0].boxes.conf.numpy() # probabilities
             classes: np.ndarray = prediction[0].boxes.cls.numpy() # predicted classes
             boxes: np.ndarray = prediction[0].boxes.xyxy.numpy().astype(np.int32) # bboxes
-            self.draw_boxes(prediction[0].orig_img, frame, scores, classes, boxes, self.CLASSES, self.generate_colors(self.CLASSES))
+            self.draw_boxes(prediction[0].orig_img, frame, scores, classes, boxes, self.CLASSES, self.generate_colors(self.CLASSES), score_threshold)
             cv2.imshow("Cyclist Detection", frame)
 
             if (cv2.waitKey(1) & 0xFF == ord('q')):
@@ -160,42 +159,39 @@ class Inference():
         random.seed(None)
         return colors
 
-    def draw_boxes(self, img, frame, scores, classes, boxes, names, colors):
+    def draw_boxes(self, img, frame, scores, classes, boxes, names, colors, score_threshold):
         '''
         This function draws the bounding box with class labels/scores over the frame.
         '''
         thickness = (frame.shape[0] + frame.shape[1]) // 300
 
         for score, cls, bbox in zip(scores, classes, boxes):
-            class_label = names[int(cls)] # class name
-            label = f"{class_label} : {score:0.2f}" # bbox label
-            lbl_margin = 3 #label margin
-            img = cv2.rectangle(img, (bbox[0], bbox[1]),
-                                (bbox[2], bbox[3]),
-                                color=colors[int(score.item())],
-                                thickness=thickness)
-            label_size = cv2.getTextSize(label,
-                                        fontFace=cv2.FONT_HERSHEY_SIMPLEX, 
-                                        fontScale=1, thickness=thickness)
-            lbl_w, lbl_h = label_size[0]
-            lbl_w += 2 * lbl_margin 
-            lbl_h += 2 * lbl_margin
-            img = cv2.rectangle(img, (bbox[0], bbox[1]),
-                                (bbox[0]+lbl_w, bbox[1]-lbl_h),
-                                color=colors[int(score.item())], 
-                                thickness=-thickness)
-            cv2.putText(img, label, (bbox[0]+ lbl_margin, bbox[1]-lbl_margin),
-                        fontFace=cv2.FONT_HERSHEY_SIMPLEX,
-                        fontScale=1.0, color=(255, 255, 255),
-                        thickness=3)
+            if score > score_threshold:
+                class_label = names[int(cls)] # class name
+                label = f"{class_label} : {score:0.2f}" # bbox label
+                lbl_margin = 3 #label margin
+                img = cv2.rectangle(img, (bbox[0], bbox[1]),
+                                    (bbox[2], bbox[3]),
+                                    color=colors[int(score.item())],
+                                    thickness=thickness)
+                label_size = cv2.getTextSize(label,
+                                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, 
+                                            fontScale=1, thickness=thickness)
+                lbl_w, lbl_h = label_size[0]
+                lbl_w += 2 * lbl_margin 
+                lbl_h += 2 * lbl_margin
+                img = cv2.rectangle(img, (bbox[0], bbox[1]),
+                                    (bbox[0]+lbl_w, bbox[1]-lbl_h),
+                                    color=colors[int(score.item())], 
+                                    thickness=-thickness)
+                cv2.putText(img, label, (bbox[0]+ lbl_margin, bbox[1]-lbl_margin),
+                            fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+                            fontScale=1.0, color=(255, 255, 255),
+                            thickness=3)
         return img
 
 if __name__ == '__main__':
     yolo = YOLO_Detection()
-    train = False
-
-    if train:
-        yolo.train()
-
-    inference = Inference(yolo, model_path='yolo/yolo11n.pt')
-    inference.predict(video_src=0, score_threshold=0.6, iou_threshold=0.5, max_boxes=10, use_webcam=True)
+    yolo.CLASSES.append('cyclist')
+    inference = Inference(yolo, model_path='yolo/best_cyclist_29.pt')
+    inference.predict(video_src=0, score_threshold=0.3, iou_threshold=0.5, max_boxes=10, use_webcam=True)
