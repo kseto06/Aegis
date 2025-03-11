@@ -1,0 +1,15 @@
+path: /content/data
+
+train: train/images
+val: test/images
+test: test/images
+
+nc: 1
+names: ['cyclist']
+
+roboflow:
+  workspace: bicycle-detection
+  project: bike-detect-ct
+  version: 5
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/bicycle-detection/bike-detect-ct/dataset/5
