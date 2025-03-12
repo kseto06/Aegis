@@ -3,7 +3,7 @@ import random
 
 import numpy as np
 import torch
-from typing import Tuple, Type
+from typing import Tuple, Type, Union
 from sklearn.model_selection import train_test_split
 
 import colorsys
@@ -14,6 +14,7 @@ from ultralytics import YOLO
 import cv2
 import threading
 from LapSRN.LapSRN import SuperResolution
+from FastSRGAN.SRGAN import SRGANInference
 
 # YOLO Class
 class YOLO_Detection():
@@ -84,24 +85,33 @@ class YOLO_Detection():
 # Running cyclist inference
 class Inference(): 
     # Pass in a yolo class and model path
-    def __init__(self, yolo: Type[object], model_path: str, super_res_path):
+    def __init__(self, yolo: Type[object], model_path: str = 'yolo/TrainedCTModels/CT_model.onnx', super_res_model_path: str = None, super_res_config_path: str = None):
         self.yolo = yolo
         self.model = YOLO(model_path)
         self.CLASSES = yolo.CLASSES
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.SuperRes = SuperResolution(MODEL_PATH=super_res_path)
-        self.SuperRes.set_model(scale=2) #Adjust based on LapSRN x<num> scale
+        self.SuperRes = SRGANInference(MODEL_PATH=super_res_model_path, CONFIG_PATH=super_res_config_path)
 
-    def predict(self, video_src: int = 0, score_threshold: float = 0.6, iou_threshold: float = 0.5, max_boxes: int = 10, zoom: int = 1, use_webcam: bool = False, use_super_res: bool = False):
+    def predict(self, video_src: int = 0, score_threshold: float = 0.6, iou_threshold: float = 0.5, max_boxes: int = 10, zoom: int = 1, resolution: Union[Tuple[int, int], None] = None, use_webcam: bool = False, use_super_res: bool = False, super_res_model: str = None):
         if use_webcam:
-            capture = cv2.VideoCapture(f'http://192.168.205.149:8080/video') #IP when connected to hotspot data
+            if resolution is None:
+                capture = cv2.VideoCapture(f'http://192.168.205.149:8080/video') #IP when connected to hotspot data
+            else:
+                capture = cv2.VideoCapture(f'http://192.168.205.149:8080/video', cv2.CAP_DSHOW)
         else:
-            capture = cv2.VideoCapture(video_src)
+            if resolution is None:
+                capture = cv2.VideoCapture(video_src)
+            else:
+                capture = cv2.VideoCapture(video_src, cv2.CAP_DSHOW)
 
         if not capture.isOpened():
             if use_webcam:
                 print("Local hosted server could not be opened, reverting to computer webcam")
             capture = cv2.VideoCapture(0)
+
+        if resolution is not None:
+            capture.set(cv2.CAP_PROP_FRAME_WIDTH, max(resolution))
+            capture.set(cv2.CAP_PROP_FRAME_HEIGHT, min(resolution))
 
         while True:
             ret, frame = capture.read()
@@ -118,9 +128,12 @@ class Inference():
             frame = frame[int(height / 2 - height / (2 * zoom)):int(height / 2 + height / (2 * zoom)),
                           int(width / 2 - width / (2 * zoom)):int(width / 2 + width / (2 * zoom))]
             
-            if not self.SuperRes.upscaled_queue.empty() and use_super_res:
+            if not self.SuperRes.upscaled_queue.empty() and use_super_res and super_res_model == 'LapSRN':
                 upscaled_img = self.SuperRes.upscaled_queue.get()
                 frame = cv2.resize(frame, (upscaled_img.shape[1], upscaled_img.shape[0]), interpolation=cv2.INTER_CUBIC) #INTER_CUBIC to maximize quality
+            elif not self.SuperRes.upscaled_queue.empty() and use_super_res and super_res_model == 'SRGAN':
+                frame = self.SuperRes.upscaled_queue.get()
+                cv2.resize(frame, (width, height))
             else:
                 cv2.resize(frame, (width, height))
 
@@ -189,5 +202,6 @@ class Inference():
 
 if __name__ == '__main__':
     yolo = YOLO_Detection()
-    inference = Inference(yolo, model_path='yolo/TrainedCTModels/CT_model.onnx', super_res_path='LapSRN/LapSRN_x2.pb')
-    inference.predict(video_src=0, score_threshold=0.3, iou_threshold=0.5, max_boxes=10, zoom=1.2, use_webcam=True, use_super_res=True)
+    inference = Inference(yolo, model_path='yolo/TrainedCTModels/CT_model.onnx', super_res_model_path='FastSRGAN/model/srgan.pt', super_res_config_path='FastSRGAN/configs/config.yaml')
+    inference.predict(video_src=0, score_threshold=0.05, iou_threshold=0.5, max_boxes=10, zoom=1, resolution=(1080, 720), use_webcam=True, use_super_res=False, super_res_model='SRGAN')
+

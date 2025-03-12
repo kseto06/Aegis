@@ -21,11 +21,18 @@ class SuperResolution():
     detect cyclists with higher-quality webcam images.
     '''
 
-    def __init__(self, MODEL_PATH: str = 'LapSRN_x2.pb'):
+    def __init__(self, MODEL_PATH: str = 'LapSRN_x2.pb', CONFIG_PATH: str = None):
         self.SR = dnn_superres.DnnSuperResImpl_create()
         if not os.path.isfile(MODEL_PATH):
             raise FileNotFoundError(f"Model file not found: {MODEL_PATH}")
         self.SR.readModel(MODEL_PATH)
+
+        # Get the scale based on LapSRN x<num> scale
+        for char in MODEL_PATH:
+            if char.isdigit():
+                self.SR.set_model(scale=int(char))
+                break
+        
         self.upscaled_queue = queue.Queue(maxsize=1)
         warn("LapSRN is DEPRECATED -- Super Resolution using LapSRN is too slow for real-time inference")
 
