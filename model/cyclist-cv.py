@@ -1,22 +1,21 @@
 # Imports
-import os
 import random
 
 import numpy as np
 import torch
-from typing import List, Tuple, Type
-from torchvision import transforms
-from torch.utils.data import DataLoader, Dataset, TensorDataset
+from typing import Tuple, Type
 from sklearn.model_selection import train_test_split
 
 import colorsys
-from PIL import Image, ImageFont, ImageDraw
 
 from ultralytics import YOLO
 
 #Webcam:
 import cv2
+import threading
+from LapSRN.LapSRN import SuperResolution
 
+# YOLO Class
 class YOLO_Detection():
     def __init__(self, model_path: str='yolo/yolo11n.pt'):
         self.CLASSES: list[str] = ['cyclist', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light',
@@ -82,36 +81,18 @@ class YOLO_Detection():
 
         return scores[nms_detections], boxes[nms_detections], classes[nms_detections]
 
-    def train(self):
-        '''
-        Finetune the pre-trained model on the cyclist dataset using Ultralytics YOLO
-        '''
-        # Load the dataset
-        dataset = DataProcessor()
-        dataset.split_data()
-        train_images, train_labels = dataset.get_train_data()
-        val_images, val_labels = dataset.get_val_data()
-
-        # Load the model
-        train_data = TensorDataset(torch.stack(train_images), torch.stack(train_labels))
-        val_data = TensorDataset(torch.stack(val_images), torch.stack(val_labels))
-
-        train_loader = DataLoader(train_data, batch_size=32, shuffle=True)
-        val_loader = DataLoader(val_data, batch_size=32, shuffle=True)
-
-        # Finetune pre-trained model
-        self.model.train(data=train_loader, val_data=val_loader, epochs=50, imgsz=640, batch=16)
-        self.model.export(format='onnx')
-
+# Running cyclist inference
 class Inference(): 
     # Pass in a yolo class and model path
-    def __init__(self, yolo: Type[object], model_path: str):
+    def __init__(self, yolo: Type[object], model_path: str, super_res_path):
         self.yolo = yolo
         self.model = YOLO(model_path)
         self.CLASSES = yolo.CLASSES
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.SuperRes = SuperResolution(MODEL_PATH=super_res_path)
+        self.SuperRes.set_model(scale=2) #Adjust based on LapSRN x<num> scale
 
-    def predict(self, video_src=0, score_threshold=0.6, iou_threshold=0.5, max_boxes=10, use_webcam=False):
+    def predict(self, video_src: int = 0, score_threshold: float = 0.6, iou_threshold: float = 0.5, max_boxes: int = 10, zoom: int = 1, use_webcam: bool = False, use_super_res: bool = False):
         if use_webcam:
             capture = cv2.VideoCapture(f'http://192.168.205.149:8080/video') #IP when connected to hotspot data
         else:
@@ -126,6 +107,22 @@ class Inference():
             ret, frame = capture.read()
             if not ret:
                 break
+
+            # Apply super resolution in a separate thread
+            if use_super_res:
+                upscale_thread = threading.Thread(target=self.SuperRes.upscale_worker, args=(frame,))
+                upscale_thread.start()
+
+            # Adjust the zoom
+            height, width, _ = frame.shape
+            frame = frame[int(height / 2 - height / (2 * zoom)):int(height / 2 + height / (2 * zoom)),
+                          int(width / 2 - width / (2 * zoom)):int(width / 2 + width / (2 * zoom))]
+            
+            if not self.SuperRes.upscaled_queue.empty() and use_super_res:
+                upscaled_img = self.SuperRes.upscaled_queue.get()
+                frame = cv2.resize(frame, (upscaled_img.shape[1], upscaled_img.shape[0]), interpolation=cv2.INTER_CUBIC) #INTER_CUBIC to maximize quality
+            else:
+                cv2.resize(frame, (width, height))
 
             # Run model prediction
             prediction = self.model(frame)
@@ -192,6 +189,5 @@ class Inference():
 
 if __name__ == '__main__':
     yolo = YOLO_Detection()
-    yolo.CLASSES.append('cyclist')
-    inference = Inference(yolo, model_path='yolo/best_cyclist_29.pt')
-    inference.predict(video_src=0, score_threshold=0.3, iou_threshold=0.5, max_boxes=10, use_webcam=True)
+    inference = Inference(yolo, model_path='yolo/TrainedCTModels/CT_model.onnx', super_res_path='LapSRN/LapSRN_x2.pb')
+    inference.predict(video_src=0, score_threshold=0.3, iou_threshold=0.5, max_boxes=10, zoom=1.2, use_webcam=True, use_super_res=True)
