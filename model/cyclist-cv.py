@@ -1,5 +1,6 @@
 # Imports
 import random
+import subprocess
 
 import numpy as np
 import torch
@@ -146,6 +147,10 @@ class Inference():
             classes: np.ndarray = prediction[0].boxes.cls.numpy() # predicted classes
             boxes: np.ndarray = prediction[0].boxes.xyxy.numpy().astype(np.int32) # bboxes
             self.draw_boxes(prediction[0].orig_img, frame, scores, classes, boxes, self.CLASSES, self.generate_colors(self.CLASSES), score_threshold)
+
+            if len(prediction[0].boxes) > 0:
+                subprocess.Popen(["afplay", "sounds/car_horn_1.mp3"])
+
             cv2.imshow("Cyclist Detection", frame)
 
             if (cv2.waitKey(1) & 0xFF == ord('q')):
