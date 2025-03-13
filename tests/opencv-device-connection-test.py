@@ -23,11 +23,14 @@ def find_device(port=8080): #8080 configured on IP Webcam
     return None #if nothing
 
 found_ip = find_device(port=8080)
-if found_ip:
+use_webcam = False
+if found_ip and use_webcam:
     capture = cv2.VideoCapture(f'http://{found_ip}:8080/video')
-else:
+elif use_webcam:
     capture = cv2.VideoCapture(f'http://192.168.205.149:8080/video') #IP when connected to data
-    
+else:
+    capture = cv2.VideoCapture(0)
+
 while True:
     ret, frame = capture.read()
     cv2.imshow('frame', frame)
