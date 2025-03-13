@@ -10,12 +10,13 @@ from sklearn.model_selection import train_test_split
 import colorsys
 
 from ultralytics import YOLO
-
-#Webcam:
 import cv2
-import threading
-from LapSRN.LapSRN import SuperResolution
-from FastSRGAN.SRGAN import SRGANInference
+from cv2.typing import MatLike
+
+import multiprocessing
+from LapSRN.LapSRN import LapSRNInference
+from FastSRGAN.SRGAN import FastSRGANInference
+from SwiftSRGAN.SRGAN import SwiftSRGANInference
 
 # YOLO Class
 class YOLO_Detection():
@@ -91,7 +92,17 @@ class Inference():
         self.model = YOLO(model_path)
         self.CLASSES = yolo.CLASSES
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.SuperRes = SRGANInference(MODEL_PATH=super_res_model_path, CONFIG_PATH=super_res_config_path)
+
+        # Optional Super Resolution models
+        if 'LapSRN' in super_res_model_path:
+            self.SuperRes = LapSRNInference()
+
+        elif 'FastSRGAN' in super_res_model_path:
+            self.SuperRes = FastSRGANInference(MODEL_PATH=super_res_model_path, CONFIG_PATH=super_res_config_path)
+                
+        elif 'SwiftSRGAN' in super_res_model_path:
+            self.SuperRes = SwiftSRGANInference(MODEL_PATH=super_res_model_path, CONFIG_PATH=None)
+        
 
     def predict(self, video_src: int = 0, score_threshold: float = 0.6, iou_threshold: float = 0.5, max_boxes: int = 10, zoom: int = 1, resolution: Union[Tuple[int, int], None] = None, use_webcam: bool = False, use_super_res: bool = False, super_res_model: str = None):
         if use_webcam:
@@ -113,28 +124,56 @@ class Inference():
         if resolution is not None:
             capture.set(cv2.CAP_PROP_FRAME_WIDTH, max(resolution))
             capture.set(cv2.CAP_PROP_FRAME_HEIGHT, min(resolution))
+        
+        if use_super_res:
+            multiprocessing.set_start_method("fork")
+
+        queue = multiprocessing.Queue()  # Create a queue to store the upscaled frame
+        sr_process = None
+        upscaled_img = None
 
         while True:
             ret, frame = capture.read()
             if not ret:
                 break
 
-            # Apply super resolution in a separate thread
-            if use_super_res:
-                upscale_thread = threading.Thread(target=self.SuperRes.upscale_worker, args=(frame,))
-                upscale_thread.start()
-
             # Adjust the zoom
             height, width, _ = frame.shape
             frame = frame[int(height / 2 - height / (2 * zoom)):int(height / 2 + height / (2 * zoom)),
                           int(width / 2 - width / (2 * zoom)):int(width / 2 + width / (2 * zoom))]
             
-            if not self.SuperRes.upscaled_queue.empty() and use_super_res and super_res_model == 'LapSRN':
-                upscaled_img = self.SuperRes.upscaled_queue.get()
-                frame = cv2.resize(frame, (upscaled_img.shape[1], upscaled_img.shape[0]), interpolation=cv2.INTER_CUBIC) #INTER_CUBIC to maximize quality
-            elif not self.SuperRes.upscaled_queue.empty() and use_super_res and super_res_model == 'SRGAN':
-                frame = self.SuperRes.upscaled_queue.get()
-                cv2.resize(frame, (width, height))
+            if use_super_res and super_res_model == 'LapSRN':
+                # Apply super resolution in a separate multithread
+                if sr_process is None or not sr_process.is_alive():
+                    sr_process = multiprocessing.Process(target=self.super_res_worker, args=(frame, queue))
+                    sr_process.start()
+
+                # Check if the super resolution process has finished
+                if not queue.empty():
+                    upscaled_img = queue.get()
+
+                if upscaled_img is not None:
+                    # Resize with super-resolution applied frame and Inter-Cubic interpolation
+                    frame = cv2.resize(frame, (upscaled_img.shape[1], upscaled_img.shape[0]), interpolation=cv2.INTER_CUBIC) #INTER_CUBIC to maximize quality
+                else:
+                    frame = cv2.resize(frame, (width, height))
+
+            elif use_super_res and (super_res_model == 'FastSRGAN' or super_res_model == 'SwiftSRGAN'):
+                # Apply super resolution in a separate multithread
+                if sr_process is None or not sr_process.is_alive():
+                    sr_process = multiprocessing.Process(target=self.super_res_worker, args=(frame, queue))
+                    sr_process.start()
+
+                # Check if the super resolution process has finished
+                if not queue.empty():
+                    upscaled_img = queue.get()
+
+                # Resize with super-resolution applied frame
+                if upscaled_img is not None:
+                    frame = cv2.resize(upscaled_img, (width, height))
+                else:
+                    frame = cv2.resize(frame, (width, height))
+
             else:
                 cv2.resize(frame, (width, height))
 
@@ -158,6 +197,10 @@ class Inference():
                 
         capture.release()
         cv2.destroyAllWindows()
+
+    def super_res_worker(self, frame: MatLike, queue: multiprocessing.Queue):
+        upscaled_img = self.SuperRes.upscale_worker(frame)
+        return upscaled_img
 
     '''
     Helper functions for YOLO inference, drawing on webcam:
@@ -207,6 +250,6 @@ class Inference():
 
 if __name__ == '__main__':
     yolo = YOLO_Detection()
-    inference = Inference(yolo, model_path='yolo/TrainedCTModels/CT_model.onnx', super_res_model_path='FastSRGAN/model/srgan.pt', super_res_config_path='FastSRGAN/configs/config.yaml')
-    inference.predict(video_src=0, score_threshold=0.05, iou_threshold=0.5, max_boxes=10, zoom=1, resolution=(1080, 720), use_webcam=True, use_super_res=False, super_res_model='SRGAN')
+    inference = Inference(yolo, model_path='yolo/TrainedCTModels/CT_model.onnx', super_res_model_path='SwiftSRGAN/model/swift_srgan_2x.pth.tar', super_res_config_path=None)
+    inference.predict(video_src=0, score_threshold=0.05, iou_threshold=0.5, max_boxes=10, zoom=1, resolution=(1080, 720), use_webcam=True, use_super_res=True, super_res_model='SwiftSRGAN')
 

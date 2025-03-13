@@ -8,7 +8,7 @@ from warnings import warn
 
 # Super Resolution object for better camera res to detect
 @DeprecationWarning
-class SuperResolution():
+class LapSRNInference():
     '''
     This class implements LapSRN -- Deep Laplacian Pyramid Networks for efficient and high-quality image super-resolution 
     LapSRN uses CNN-based Super Resolution algorithms where there are:
@@ -32,7 +32,7 @@ class SuperResolution():
             if char.isdigit():
                 self.SR.set_model(scale=int(char))
                 break
-        
+
         self.upscaled_queue = queue.Queue(maxsize=1)
         warn("LapSRN is DEPRECATED -- Super Resolution using LapSRN is too slow for real-time inference")
 
@@ -42,7 +42,7 @@ class SuperResolution():
         if torch.cuda.is_available():
             self.SR.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
             self.SR.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
-
+    
     def upscale(self, image: np.ndarray) -> np.ndarray:
         return self.SR.upsample(image)
     

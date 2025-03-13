@@ -10,14 +10,14 @@ import numpy as np
 
 from omegaconf import OmegaConf
 from PIL import Image
-import queue
 
 from cv2.typing import MatLike
 from typing import Tuple, Union
+import queue
 
 
 # INFERENCE:
-class SRGANInference():
+class FastSRGANInference():
     """
     Super-resolves images using Fast-SRGAN in real-time before running YOLO predictions
     Uses threading to avoid webcam lag during inference (might not be needed though)
@@ -31,6 +31,9 @@ class SRGANInference():
         else:
             self.device = 'cpu'
 
+        # NOTE: updated -- multiprocessing only works on cpu:
+        self.device = 'cpu'
+
         # Initialize the model with weights
         config = OmegaConf.load(CONFIG_PATH)
         self.model = Generator(config=config.generator)
@@ -39,7 +42,7 @@ class SRGANInference():
         self.model.load_state_dict({layer.replace("_orig_mod.", ""): weight for layer, weight in weights.items()}) # Load correct layer names and weights
         self.model.to(self.device).eval()
         self.model = torch.quantization.quantize_dynamic(self.model, {torch.nn.Linear}, dtype=torch.qint8) # INT8 Quantization
-        self.upscaled_queue = queue.Queue(maxsize=1) # Multithreading
+        self.upscaled_queue = queue.Queue(maxsize=1)
 
     def upscale(self, image):
         '''
