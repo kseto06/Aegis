@@ -1,0 +1,8 @@
+path: /content/cimat-cyclist-master-research-object_detection-images-cyclist-orientation/research/object_detection/images/cyclist-orientation
+
+train: training/train
+val: testing/test
+test: testing/test
+
+nc: 1
+names: ['cyclist']
