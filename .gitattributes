@@ -1,2 +1,2 @@
 *.ipynb linguist-language=C linguist-detectable
-*.C linguist-language=Jupyter Notebook
+*.c linguist-language=Jupyter Notebook
