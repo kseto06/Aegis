@@ -102,8 +102,10 @@ class Inference():
                 
         elif 'SwiftSRGAN' in super_res_model_path:
             self.SuperRes = SwiftSRGANInference(MODEL_PATH=super_res_model_path, CONFIG_PATH=None)
-        
 
+        # Compile the C (Arduino) file to play the action
+        subprocess.Popen(["gcc", "Arduino.c", "-o", "Arduino"])
+        
     def predict(self, video_src: int = 0, score_threshold: float = 0.6, iou_threshold: float = 0.5, max_boxes: int = 10, zoom: int = 1, resolution: Union[Tuple[int, int], None] = None, use_webcam: bool = False, use_super_res: bool = False, super_res_model: str = None):
         '''
         This function runs live inference on a connected camera (default: webcam) with optional Super Resolution
@@ -192,7 +194,8 @@ class Inference():
 
             # Sound alert system on prediction
             if len(prediction[0].boxes) > 0:
-                subprocess.Popen(["afplay", "model/sounds/car_horn_1.mp3"])
+                self.action()
+                # subprocess.Popen(["afplay", "model/sounds/car_horn_1.mp3"])
 
             cv2.imshow("Cyclist Detection", frame)
 
@@ -202,10 +205,16 @@ class Inference():
         capture.release()
         cv2.destroyAllWindows()
 
+    def action(self):
+        '''
+        Using subprocess to open and play a C file's action (for future Arduino integration)
+        '''
+        subprocess.Popen(["./Arduino"])
+
     def super_res_worker(self, frame: MatLike, queue: multiprocessing.Queue):
         upscaled_img = self.SuperRes.upscale_worker(frame)
         return upscaled_img
-
+    
     '''
     Helper functions for YOLO inference, drawing on webcam:
     '''
