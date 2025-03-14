@@ -14,13 +14,13 @@ import cv2
 from cv2.typing import MatLike
 
 import multiprocessing
-from LapSRN.LapSRN import LapSRNInference
-from FastSRGAN.SRGAN import FastSRGANInference
-from SwiftSRGAN.SRGAN import SwiftSRGANInference
+from model.LapSRN.LapSRN import LapSRNInference
+from model.FastSRGAN.SRGAN import FastSRGANInference
+from model.SwiftSRGAN.SRGAN import SwiftSRGANInference
 
 # YOLO Class
 class YOLO_Detection():
-    def __init__(self, model_path: str='yolo/yolo11n.pt'):
+    def __init__(self, model_path: str='model/yolo/yolo11n.pt'):
         self.CLASSES: list[str] = ['cyclist', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light',
            'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
            'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee',
@@ -263,6 +263,6 @@ class Inference():
 
 if __name__ == '__main__':
     yolo = YOLO_Detection()
-    inference = Inference(yolo, model_path='yolo/TrainedCTCIMATModels/CTCIMAT.onnx', super_res_model_path='SwiftSRGAN/model/swift_srgan_2x.pth.tar', super_res_config_path=None)
+    inference = Inference(yolo, model_path='model/yolo/TrainedCTCIMATModels/CTCIMAT.onnx', super_res_model_path='model/SwiftSRGAN/model/swift_srgan_2x.pth.tar', super_res_config_path=None)
     inference.predict(video_src=0, score_threshold=0.05, iou_threshold=0.5, max_boxes=10, zoom=1, resolution=(1080, 720), use_webcam=True, use_super_res=True, super_res_model='SwiftSRGAN')
 
