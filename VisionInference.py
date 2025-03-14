@@ -87,7 +87,7 @@ class YOLO_Detection():
 # Running cyclist inference
 class Inference(): 
     # Pass in a yolo class and model path
-    def __init__(self, yolo: Type[object], model_path: str = 'yolo/TrainedCTModels/CT_model.onnx', super_res_model_path: str = None, super_res_config_path: str = None):
+    def __init__(self, yolo: Type[object], model_path: str = 'model/yolo/TrainedCTCIMATModels/CTCIMAT.onnx', super_res_model_path: str = None, super_res_config_path: str = None):
         self.yolo = yolo
         self.model = YOLO(model_path)
         self.CLASSES = yolo.CLASSES
@@ -192,7 +192,7 @@ class Inference():
 
             # Sound alert system on prediction
             if len(prediction[0].boxes) > 0:
-                subprocess.Popen(["afplay", "sounds/car_horn_1.mp3"])
+                subprocess.Popen(["afplay", "model/sounds/car_horn_1.mp3"])
 
             cv2.imshow("Cyclist Detection", frame)
 
@@ -264,5 +264,4 @@ class Inference():
 if __name__ == '__main__':
     yolo = YOLO_Detection()
     inference = Inference(yolo, model_path='model/yolo/TrainedCTCIMATModels/CTCIMAT.onnx', super_res_model_path='model/SwiftSRGAN/model/swift_srgan_2x.pth.tar', super_res_config_path=None)
-    inference.predict(video_src=0, score_threshold=0.05, iou_threshold=0.5, max_boxes=10, zoom=1, resolution=(1080, 720), use_webcam=True, use_super_res=True, super_res_model='SwiftSRGAN')
-
+    inference.predict(video_src=0, score_threshold=0.30, iou_threshold=0.5, max_boxes=10, zoom=1, resolution=(1080, 720), use_webcam=True, use_super_res=True, super_res_model='SwiftSRGAN')

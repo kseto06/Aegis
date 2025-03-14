@@ -12,6 +12,7 @@ from typing import Tuple, Union
 Swift-SRGAN aims to implement a model that is able to achieve the results of normal SRGAN, but much faster
 - Done using depthwise separable convolution in the GAN network, achieving a performance model that is comparible to normal SRGAN
   while speeding up computation 74x faster and is also 1/8 of original model size
+- Trained on the DIV2K dataset for resolution high quality images
 '''
 class SwiftSRGANInference():
     """
@@ -64,7 +65,7 @@ class Generator(nn.Module):
     Swift-SRGAN Generator, creating fake data (Super Resolution images) with discriminator feedback
     """
 
-    def __init__(self, in_channels: int = 3, num_channels: int = 64, num_blocks: int = 16, upscale_factor: int = 4):
+    def __init__(self, in_channels: int = 3, num_channels: int = 64, num_blocks: int = 16, upscale_factor: int = 2):
         super(Generator, self).__init__()
         
         self.initial = ConvBlock(
