@@ -105,6 +105,9 @@ class Inference():
         
 
     def predict(self, video_src: int = 0, score_threshold: float = 0.6, iou_threshold: float = 0.5, max_boxes: int = 10, zoom: int = 1, resolution: Union[Tuple[int, int], None] = None, use_webcam: bool = False, use_super_res: bool = False, super_res_model: str = None):
+        '''
+        This function runs live inference on a connected camera (default: webcam) with optional Super Resolution
+        '''
         if use_webcam:
             if resolution is None:
                 capture = cv2.VideoCapture(f'http://192.168.205.149:8080/video') #IP when connected to hotspot data
@@ -187,6 +190,7 @@ class Inference():
             boxes: np.ndarray = prediction[0].boxes.xyxy.numpy().astype(np.int32) # bboxes
             self.draw_boxes(prediction[0].orig_img, frame, scores, classes, boxes, self.CLASSES, self.generate_colors(self.CLASSES), score_threshold)
 
+            # Sound alert system on prediction
             if len(prediction[0].boxes) > 0:
                 subprocess.Popen(["afplay", "sounds/car_horn_1.mp3"])
 
@@ -228,21 +232,30 @@ class Inference():
                 class_label = names[int(cls)] # class name
                 label = f"{class_label} : {score:0.2f}" # bbox label
                 lbl_margin = 3 #label margin
-                img = cv2.rectangle(img, (bbox[0], bbox[1]),
-                                    (bbox[2], bbox[3]),
+
+                img = cv2.rectangle(img=img, 
+                                    pt1=(bbox[0], bbox[1]),
+                                    pt2=(bbox[2], bbox[3]),
                                     color=colors[int(score.item())],
                                     thickness=thickness)
-                label_size = cv2.getTextSize(label,
+                
+                label_size = cv2.getTextSize(text=label,
                                             fontFace=cv2.FONT_HERSHEY_SIMPLEX, 
                                             fontScale=1, thickness=thickness)
+                
                 lbl_w, lbl_h = label_size[0]
                 lbl_w += 2 * lbl_margin 
                 lbl_h += 2 * lbl_margin
-                img = cv2.rectangle(img, (bbox[0], bbox[1]),
-                                    (bbox[0]+lbl_w, bbox[1]-lbl_h),
+
+                img = cv2.rectangle(img=img, 
+                                    pt1=(bbox[0], bbox[1]),
+                                    pt2=(bbox[0]+lbl_w, bbox[1]-lbl_h),
                                     color=colors[int(score.item())], 
-                                    thickness=-thickness)
-                cv2.putText(img, label, (bbox[0]+ lbl_margin, bbox[1]-lbl_margin),
+                                    thickness= -thickness)
+                
+                cv2.putText(img=img, 
+                            text=label, 
+                            org=(bbox[0]+ lbl_margin, bbox[1]-lbl_margin),
                             fontFace=cv2.FONT_HERSHEY_SIMPLEX,
                             fontScale=1.0, color=(255, 255, 255),
                             thickness=3)
@@ -250,6 +263,6 @@ class Inference():
 
 if __name__ == '__main__':
     yolo = YOLO_Detection()
-    inference = Inference(yolo, model_path='yolo/TrainedCTModels/CT_model.onnx', super_res_model_path='SwiftSRGAN/model/swift_srgan_2x.pth.tar', super_res_config_path=None)
+    inference = Inference(yolo, model_path='yolo/TrainedCTCIMATModels/CTCIMAT.onnx', super_res_model_path='SwiftSRGAN/model/swift_srgan_2x.pth.tar', super_res_config_path=None)
     inference.predict(video_src=0, score_threshold=0.05, iou_threshold=0.5, max_boxes=10, zoom=1, resolution=(1080, 720), use_webcam=True, use_super_res=True, super_res_model='SwiftSRGAN')
 
