@@ -10,7 +10,7 @@
 - mAP50-95  0.846183
 - mAP50     0.985844
 - mAP75     0.945719
-- 
+
 <br>
 
 Pretrained models: 
