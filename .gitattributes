@@ -1,1 +1,1 @@
-echo "model/*.ipynb filter=nbstripout" >> .gitattributes
+model/*.ipynb filter=nbstripout
