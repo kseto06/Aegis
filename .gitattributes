@@ -1,2 +1,1 @@
-*.ipynb linguist-language=C linguist-detectable
-*.c linguist-language=Jupyter Notebook
+*.ipynb filter=strip-notebook-output
