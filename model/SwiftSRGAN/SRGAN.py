@@ -39,6 +39,23 @@ class SwiftSRGANInference():
         self.model = torch.quantization.quantize_dynamic(self.model, {torch.nn.Linear}, dtype=torch.qint8) # INT8 Quantization
         self.upscaled_queue = queue.Queue(maxsize=1) #Multiprocessing queue
 
+    def upscale(self, frame: MatLike):
+        '''
+        Create a separate multithread to perform super-resolution to try to prevent lag
+        '''
+        with torch.no_grad():
+            # Get the low-res/unprocessed image
+            img = np.array(Image.fromarray(frame).convert("RGB"))
+            img = (torch.from_numpy(img) / 127.5) / 1.0
+            img = img.permute(2, 0, 1).unsqueeze(dim=0).to(device=self.device)
+
+            # Process a super-res image using the model
+            img = self.model(img).cpu()
+            img = (img + 1.0) / 2.0
+            img = img.permute(0, 2, 3, 1).squeeze()
+            img = (img * 255).numpy().astype(np.uint8)
+            return img
+
     def upscale_worker(self, frame: MatLike):
         '''
         Create a separate multithread to perform super-resolution to try to prevent lag
@@ -78,7 +95,7 @@ class Generator(nn.Module):
         self.residual = nn.Sequential(
             *[ResidualBlock(num_channels) for _ in range(num_blocks)] #Unpack list comprehension
         )
-        self.convblock = ConvBlock(num_channels, num_channels, kernel_size=3, stride=1, padding=1, use_act=False)
+        self.convblock = ConvBlock(num_channels, num_channels, kernel_size=3, stride=1, padding=1, use_activation=False)
         self.upsampler = nn.Sequential(
             *[UpsampleBlock(num_channels, scale_factor=2) for _ in range(upscale_factor//2)]
         )
@@ -86,10 +103,11 @@ class Generator(nn.Module):
         
     def forward(self, x: torch.tensor) -> torch.tensor:
         initial = self.initial(x)
-        x = self.residual(initial)
-        x = self.convblock(x) + initial
+        x = self.residual(initial) 
+        x = self.convblock(x) + initial #Initial block here gets carried over to the current layer with elementwise sum
         x = self.upsampler(x)
-        return (torch.tanh(self.final_conv(x)) + 1) / 2
+        x = torch.tanh(self.final_conv(x)) + 1 / 2
+        return x
     
 class Discriminator(nn.Module):
     """
@@ -114,7 +132,7 @@ class Discriminator(nn.Module):
                     stride=1 + i % 2,
                     padding=1,
                     discriminator=True,
-                    use_act=True,
+                    use_activation=True,
                     use_bn=False if i == 0 else True,
                 )
             )
@@ -171,10 +189,10 @@ class ConvBlock(nn.Module):
     '''
     Defines the class for a Swift-SRGAN convolutional layer-block that utilizes depthwise separable convolution for faster inference
     '''
-    def __init__(self, in_channels: int, out_channels: int, use_act: bool=True, use_bn: bool=True, discriminator: bool = False, **kwargs):
+    def __init__(self, in_channels: int, out_channels: int, use_activation: bool=True, use_bn: bool=True, discriminator: bool = False, **kwargs):
         super(ConvBlock, self).__init__()
 
-        self.use_act = use_act
+        self.use_activation = use_activation
         self.cnn = SeparableConv2d(in_channels=in_channels, 
                                    out_channels=out_channels, 
                                    **kwargs, 
@@ -183,7 +201,7 @@ class ConvBlock(nn.Module):
         self.act = nn.LeakyReLU(0.2, inplace=True) if discriminator else nn.PReLU(num_parameters=out_channels)
 
     def forward(self, x: torch.tensor) -> torch.tensor:
-        if self.use_act:
+        if self.use_activation:
             x = self.cnn(x)
             x = self.bn(x)
             x = self.act(x)
@@ -196,6 +214,8 @@ class ConvBlock(nn.Module):
 class UpsampleBlock(nn.Module):
     '''
     Define the class for an upsampling block, which increases spatial resolution (SuperRes) of images
+
+    An upsample layer is defined as a depthwise convolution, pixel shuffle layer of a given scale factor, and a PReLU activation function
     '''
     def __init__(self, in_channels: int, scale_factor: int):
         super(UpsampleBlock, self).__init__()
@@ -220,6 +240,9 @@ class ResidualBlock(nn.Module):
     Define the class for a Residual block:
     - Address the vanishing gradient problem, relaying information via residual connnection
     - Enable training of very deep NNs by incorporating skip connections
+
+    The residual block is simply two convolutional blocks, such that the first convolutional block uses the PReLU activation function,
+    and then 2nd one doesn't use it but the elementwise sum is applied
     '''
     def __init__(self, in_channels: int):
         super(ResidualBlock, self).__init__()
@@ -237,7 +260,7 @@ class ResidualBlock(nn.Module):
             kernel_size=3,
             stride=1,
             padding=1,
-            use_act=False
+            use_activation=False
         )
         
     def forward(self, x: torch.tensor) -> torch.tensor:
