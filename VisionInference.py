@@ -18,6 +18,10 @@ from model.LapSRN.LapSRN import LapSRNInference
 from model.FastSRGAN.SRGAN import FastSRGANInference
 from model.SwiftSRGAN.SRGAN import SwiftSRGANInference
 
+from pyfirmata import Arduino, util
+import threading
+import time
+
 # YOLO Class
 class YOLO_Detection():
     def __init__(self, model_path: str='model/yolo/yolo11n.pt'):
@@ -87,7 +91,7 @@ class YOLO_Detection():
 # Running cyclist inference
 class Inference(): 
     # Pass in a yolo class and model path
-    def __init__(self, yolo: Type[object], model_path: str = 'model/yolo/TrainedCTCIMATModels/CTCIMAT.onnx', super_res_model_path: str = None, super_res_config_path: str = None):
+    def __init__(self, yolo: Type[object], model_path: str = 'model/yolo/TrainedCTCIMATModels/CTCIMAT.onnx', super_res_model_path: str = None, super_res_config_path: str = None, ARDUINO_PORT: str = '/dev/cu.usbmodem21401'):
         self.yolo = yolo
         self.model = YOLO(model_path)
         self.CLASSES = yolo.CLASSES
@@ -104,7 +108,15 @@ class Inference():
             self.SuperRes = SwiftSRGANInference(MODEL_PATH=super_res_model_path, CONFIG_PATH=None)
 
         # Compile the C (Arduino) file to play the action
-        subprocess.Popen(["gcc", "Arduino.c", "-o", "Arduino"])
+        # subprocess.Popen(["gcc", "Arduino.c", "-o", "Arduino"])
+
+        try:
+            self.board = Arduino(ARDUINO_PORT)
+            self.led_pin = 13
+            self.last_detection_time = 0
+        except Exception as e:
+            print("Arduino initialization failed: ", e)
+            self.board = None
         
     def predict(self, video_src: int = 0, score_threshold: float = 0.6, iou_threshold: float = 0.5, max_boxes: int = 10, zoom: int = 1, resolution: Union[Tuple[int, int], None] = None, use_webcam: bool = False, use_super_res: bool = False, super_res_model: str = None):
         '''
@@ -192,10 +204,9 @@ class Inference():
             boxes: np.ndarray = prediction[0].boxes.xyxy.numpy().astype(np.int32) # bboxes
             self.draw_boxes(prediction[0].orig_img, frame, scores, classes, boxes, self.CLASSES, self.generate_colors(self.CLASSES), score_threshold)
 
-            # Sound alert system on prediction
+            # Alert system on prediction
             if len(prediction[0].boxes) > 0:
                 self.action()
-                # subprocess.Popen(["afplay", "model/sounds/car_horn_1.mp3"])
 
             cv2.imshow("Cyclist Detection", frame)
 
@@ -207,9 +218,25 @@ class Inference():
 
     def action(self):
         '''
-        Using subprocess to open and play a C file's action (for future Arduino integration)
+        Using subprocess to open and make a response action
         '''
-        subprocess.Popen(["./Arduino"])
+        # Sound: 
+        subprocess.Popen(["./arduino/Sound"])
+
+        # Arduino light:
+        def _action_thread():
+            self.last_detection_time = time.time()
+            self.board.digital[self.led_pin].write(1) # Turning on the LED before the loop
+
+            while time.time() - self.last_detection_time < 10: # Keep the light on for 10s on detection
+                time.sleep(1)
+            
+            self.board.digital[self.led_pin].write(0) # Turning off the LED after the loop
+
+        if self.board is None:
+            return 
+        else:
+            threading.Thread(target=_action_thread, daemon=True).start()
 
     def super_res_worker(self, frame: MatLike, queue: multiprocessing.Queue):
         upscaled_img = self.SuperRes.upscale_worker(frame)

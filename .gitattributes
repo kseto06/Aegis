@@ -1,1 +1,2 @@
 model/*.ipynb filter=nbstripout
+arduino/*.ino linguist-language=C

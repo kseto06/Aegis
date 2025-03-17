@@ -2,7 +2,7 @@
 
 /*
 COMPILE CMD: 
-gcc Arduino.c -o Arduino
+gcc Sound.c -o Sound
 
 VisionInference.py will automatically compile and run the C file, so only need to run VisionInference to test
 */
