@@ -118,7 +118,7 @@ class Inference():
             print("Arduino initialization failed: ", e)
             self.board = None
         
-    def predict(self, video_src: int = 0, score_threshold: float = 0.6, iou_threshold: float = 0.5, max_boxes: int = 10, zoom: int = 1, resolution: Union[Tuple[int, int], None] = None, use_webcam: bool = False, use_super_res: bool = False, super_res_model: str = None):
+    def predict(self, video_src: int = 0, score_threshold: float = 0.2, iou_threshold: float = 0.5, max_boxes: int = 10, zoom: int = 1, resolution: Union[Tuple[int, int], None] = None, use_webcam: bool = False, use_super_res: bool = False, super_res_model: str = None):
         '''
         This function runs live inference on a connected camera (default: webcam) with optional Super Resolution
         '''
@@ -202,7 +202,8 @@ class Inference():
             scores: np.ndarray = prediction[0].boxes.conf.numpy() # probabilities
             classes: np.ndarray = prediction[0].boxes.cls.numpy() # predicted classes
             boxes: np.ndarray = prediction[0].boxes.xyxy.numpy().astype(np.int32) # bboxes
-            self.draw_boxes(prediction[0].orig_img, frame, scores, classes, boxes, self.CLASSES, self.generate_colors(self.CLASSES), score_threshold)
+            # self.draw_boxes(prediction[0].orig_img, frame, scores, classes, boxes, self.CLASSES, self.generate_colors(self.CLASSES), score_threshold)
+            self.draw_boxes(prediction[0].orig_img, boxes, scores, classes, score_threshold)
 
             # Alert system on prediction
             if len(prediction[0].boxes) > 0:
@@ -242,6 +243,55 @@ class Inference():
         upscaled_img = self.SuperRes.upscale_worker(frame)
         return upscaled_img
     
+    def video_predict(self, video_path: str = 'tests/cyclist_vid1.mp4', output_dir: str = 'tests'):
+
+        capture = cv2.VideoCapture(video_path)
+
+        if not capture.isOpened():
+            raise Exception("Prediction for video did not init successfully")
+            exit()
+
+        # Get video properties
+        fps = int(capture.get(cv2.CAP_PROP_FPS))
+        frame_width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+        frame_height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+        # Output video writer
+        output_path = f"{output_dir}/output.mp4"
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec
+        out = cv2.VideoWriter(output_path, fourcc, fps, (frame_width, frame_height))
+
+        while True:
+            ret, frame = capture.read()
+            if not ret:
+                break 
+
+            # Run YOLO inference
+            predictions = self.model(frame)
+            predictions = [predictions] if not isinstance(predictions, list) else predictions
+
+            # Process detection results
+            for prediction in predictions:
+                boxes = prediction.boxes.xyxy.cpu().numpy()  # Get bounding boxes
+                scores = prediction.boxes.conf.cpu().numpy()  # Get confidence scores
+                classes = prediction.boxes.cls.cpu().numpy().astype(np.int32) # bboxes
+
+                # Draw bounding boxes
+                self.draw_boxes(frame, boxes, scores, classes)
+
+            # Show output frame
+            cv2.imshow("YOLO Video Inference", frame)
+
+            # Save output frame
+            out.write(frame)
+
+            if cv2.waitKey(int(1000 / fps)) & 0xFF == ord('q'):
+                break
+
+        capture.release()
+        out.release()
+        cv2.destroyAllWindows()
+    
     '''
     Helper functions for YOLO inference, drawing on webcam:
     '''
@@ -256,48 +306,23 @@ class Inference():
         random.shuffle(colors)  # Shuffle colors
         random.seed(None)
         return colors
-
-    def draw_boxes(self, img, frame, scores, classes, boxes, names, colors, score_threshold):
-        '''
-        This function draws the bounding box with class labels/scores over the frame.
-        '''
-        thickness = (frame.shape[0] + frame.shape[1]) // 300
-
-        for score, cls, bbox in zip(scores, classes, boxes):
-            if score > score_threshold:
-                class_label = names[int(cls)] # class name
-                label = f"{class_label} : {score:0.2f}" # bbox label
-                lbl_margin = 3 #label margin
-
-                img = cv2.rectangle(img=img, 
-                                    pt1=(bbox[0], bbox[1]),
-                                    pt2=(bbox[2], bbox[3]),
-                                    color=colors[int(score.item())],
-                                    thickness=thickness)
+    
+    def draw_boxes(self, frame: MatLike, boxes: np.ndarray, scores: np.ndarray, classes: np.ndarray, score_threshold: float = 0.3):
+        for box, score, cls in zip(boxes, scores, classes):
+            if score >= score_threshold:
+                x1, y1, x2, y2 = map(int, box)
+                label = f"Cyclist: {score:.2f}"
+                colors = self.generate_colors(self.CLASSES)
+                colors = list(map(lambda x: (int(x[2] * 255), int(x[1] * 255), int(x[0] * 255)), colors))  # Convert to BGR for OpenCV
                 
-                label_size = cv2.getTextSize(text=label,
-                                            fontFace=cv2.FONT_HERSHEY_SIMPLEX, 
-                                            fontScale=1, thickness=thickness)
-                
-                lbl_w, lbl_h = label_size[0]
-                lbl_w += 2 * lbl_margin 
-                lbl_h += 2 * lbl_margin
+                # Draw bounding box
+                frame = cv2.rectangle(frame, (x1, y1), (x2, y2), colors[int(cls)], 2)
+                cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, colors[int(cls)], 2)
 
-                img = cv2.rectangle(img=img, 
-                                    pt1=(bbox[0], bbox[1]),
-                                    pt2=(bbox[0]+lbl_w, bbox[1]-lbl_h),
-                                    color=colors[int(score.item())], 
-                                    thickness= -thickness)
-                
-                cv2.putText(img=img, 
-                            text=label, 
-                            org=(bbox[0]+ lbl_margin, bbox[1]-lbl_margin),
-                            fontFace=cv2.FONT_HERSHEY_SIMPLEX,
-                            fontScale=1.0, color=(255, 255, 255),
-                            thickness=3)
-        return img
+        return frame
 
 if __name__ == '__main__':
     yolo = YOLO_Detection()
     inference = Inference(yolo, model_path='model/yolo/TrainedCTCIMATModels/CTCIMAT.onnx', super_res_model_path='model/SwiftSRGAN/model/swift_srgan_2x.pth.tar', super_res_config_path=None)
-    inference.predict(video_src=0, score_threshold=0.30, iou_threshold=0.5, max_boxes=10, zoom=1, resolution=(1080, 720), use_webcam=True, use_super_res=True, super_res_model='SwiftSRGAN')
+    # inference.predict(video_src=0, score_threshold=0.10, iou_threshold=0.5, max_boxes=10, zoom=1, resolution=(1080, 720), use_webcam=True, use_super_res=False, super_res_model='SwiftSRGAN')
+    inference.video_predict()
