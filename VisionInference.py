@@ -107,8 +107,8 @@ class Inference():
         elif 'SwiftSRGAN' in super_res_model_path:
             self.SuperRes = SwiftSRGANInference(MODEL_PATH=super_res_model_path, CONFIG_PATH=None)
 
-        # Compile the C (Arduino) file to play the action
-        # subprocess.Popen(["gcc", "Arduino.c", "-o", "Arduino"])
+        # Compile the C (Sound) file to play the action
+        subprocess.Popen(["gcc", "./arduino/Sound.c", "-o", "./arduino/Sound"])
 
         try:
             self.board = Arduino(ARDUINO_PORT)
@@ -201,7 +201,7 @@ class Inference():
             # self.plot_bboxes(prediction);
             scores: np.ndarray = prediction[0].boxes.conf.numpy() # probabilities
             classes: np.ndarray = prediction[0].boxes.cls.numpy() # predicted classes
-            boxes: np.ndarray = prediction[0].boxes.xyxy.numpy().astype(np.int32) # bboxes
+            boxes: np.ndarray = prediction[0].boxes.xyxy.numpy() # bboxes
             # self.draw_boxes(prediction[0].orig_img, frame, scores, classes, boxes, self.CLASSES, self.generate_colors(self.CLASSES), score_threshold)
             self.draw_boxes(prediction[0].orig_img, boxes, scores, classes, score_threshold)
 
@@ -244,7 +244,6 @@ class Inference():
         return upscaled_img
     
     def video_predict(self, video_path: str = 'tests/cyclist_vid1.mp4', output_dir: str = 'tests'):
-
         capture = cv2.VideoCapture(video_path)
 
         if not capture.isOpened():
@@ -258,7 +257,7 @@ class Inference():
 
         # Output video writer
         output_path = f"{output_dir}/output.mp4"
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v') # Codec
         out = cv2.VideoWriter(output_path, fourcc, fps, (frame_width, frame_height))
 
         while True:
@@ -274,7 +273,7 @@ class Inference():
             for prediction in predictions:
                 boxes = prediction.boxes.xyxy.cpu().numpy()  # Get bounding boxes
                 scores = prediction.boxes.conf.cpu().numpy()  # Get confidence scores
-                classes = prediction.boxes.cls.cpu().numpy().astype(np.int32) # bboxes
+                classes = prediction.boxes.cls.cpu().numpy() # bboxes
 
                 # Draw bounding boxes
                 self.draw_boxes(frame, boxes, scores, classes)
@@ -316,13 +315,13 @@ class Inference():
                 colors = list(map(lambda x: (int(x[2] * 255), int(x[1] * 255), int(x[0] * 255)), colors))  # Convert to BGR for OpenCV
                 
                 # Draw bounding box
-                frame = cv2.rectangle(frame, (x1, y1), (x2, y2), colors[int(cls)], 2)
-                cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, colors[int(cls)], 2)
+                frame = cv2.rectangle(frame, (x1, y1), (x2, y2), colors[int(cls)], thickness=2*2)
+                cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5*1.75, colors[int(cls)], thickness=3)
 
         return frame
 
 if __name__ == '__main__':
     yolo = YOLO_Detection()
     inference = Inference(yolo, model_path='model/yolo/TrainedCTCIMATModels/CTCIMAT.onnx', super_res_model_path='model/SwiftSRGAN/model/swift_srgan_2x.pth.tar', super_res_config_path=None)
-    # inference.predict(video_src=0, score_threshold=0.10, iou_threshold=0.5, max_boxes=10, zoom=1, resolution=(1080, 720), use_webcam=True, use_super_res=False, super_res_model='SwiftSRGAN')
-    inference.video_predict()
+    inference.predict(video_src=0, score_threshold=0.40, iou_threshold=0.5, max_boxes=10, zoom=1, resolution=(1080, 720), use_webcam=True, use_super_res=False, super_res_model='SwiftSRGAN')
+    # inference.video_predict()
