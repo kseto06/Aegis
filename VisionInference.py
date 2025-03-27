@@ -4,7 +4,7 @@ import subprocess
 
 import numpy as np
 import torch
-from typing import Tuple, Type, Union
+from typing import List, Tuple, Type, Union
 from sklearn.model_selection import train_test_split
 
 import colorsys
@@ -21,6 +21,8 @@ from model.SwiftSRGAN.SRGAN import SwiftSRGANInference
 from pyfirmata import Arduino, util
 import threading
 import time
+
+from lights.youtube_light import launch_video
 
 # YOLO Class
 class YOLO_Detection():
@@ -117,8 +119,13 @@ class Inference():
         except Exception as e:
             print("Arduino initialization failed: ", e)
             self.board = None
+
+        # Boolean to ensure only youtube_light opens once
+        self.youtube_opened: bool = False
         
-    def predict(self, video_src: int = 0, score_threshold: float = 0.2, iou_threshold: float = 0.5, max_boxes: int = 10, zoom: int = 1, resolution: Union[Tuple[int, int], None] = None, use_webcam: bool = False, use_super_res: bool = False, super_res_model: str = None):
+    def predict(self, video_src: int = 0, score_threshold: float = 0.2, iou_threshold: float = 0.5, max_boxes: int = 10, zoom: int = 1, resolution: Union[Tuple[int, int], None] = None, use_webcam: bool = False, 
+                use_super_res: bool = False, super_res_model: str = None,
+                use_sound: bool = True, use_arduino: bool = False, use_youtube_light: bool = False):
         '''
         This function runs live inference on a connected camera (default: webcam) with optional Super Resolution
         '''
@@ -207,7 +214,7 @@ class Inference():
 
             # Alert system on prediction
             if len(prediction[0].boxes) > 0:
-                self.action()
+                self.action(use_sound, use_arduino, use_youtube_light)
 
             cv2.imshow("Cyclist Detection", frame)
 
@@ -217,12 +224,21 @@ class Inference():
         capture.release()
         cv2.destroyAllWindows()
 
-    def action(self):
+    def action(self, use_sound: bool = True, use_arduino: bool = False, use_youtube_light = False):
         '''
         Using subprocess to open and make a response action
         '''
         # Sound: 
-        subprocess.Popen(["./arduino/Sound"])
+        if use_sound:
+            subprocess.Popen(["./arduino/Sound"])
+
+        # YouTube light:
+        if use_youtube_light and self.youtube_opened is not True:
+            try:
+                threading.Thread(target=launch_video, daemon=True).start()
+                self.youtube_opened = True
+            except Exception as e:
+                print(f"Error launching video: {e}")
 
         # Arduino light:
         def _action_thread():
@@ -234,7 +250,7 @@ class Inference():
             
             self.board.digital[self.led_pin].write(0) # Turning off the LED after the loop
 
-        if self.board is None:
+        if self.board is None or not use_arduino:
             return 
         else:
             threading.Thread(target=_action_thread, daemon=True).start()
@@ -322,6 +338,8 @@ class Inference():
 
 if __name__ == '__main__':
     yolo = YOLO_Detection()
-    inference = Inference(yolo, model_path='model/yolo/TrainedCTCIMATModels/CTCIMAT.onnx', super_res_model_path='model/SwiftSRGAN/model/swift_srgan_2x.pth.tar', super_res_config_path=None)
-    inference.predict(video_src=0, score_threshold=0.40, iou_threshold=0.5, max_boxes=10, zoom=1, resolution=(1080, 720), use_webcam=True, use_super_res=False, super_res_model='SwiftSRGAN')
+    inference = Inference(yolo=yolo, model_path='model/yolo/TrainedCTCIMATModels/CTCIMAT.onnx', super_res_model_path='model/SwiftSRGAN/model/swift_srgan_2x.pth.tar', super_res_config_path=None)
+    inference.predict(video_src=0, score_threshold=0.40, iou_threshold=0.5, max_boxes=10, zoom=1, resolution=(1080, 720), use_webcam=True, 
+                      use_super_res=False, super_res_model='SwiftSRGAN', 
+                      use_sound=False, use_arduino=False, use_youtube_light=True)
     # inference.video_predict()
