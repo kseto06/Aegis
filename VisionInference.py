@@ -93,11 +93,15 @@ class YOLO_Detection():
 # Running cyclist inference
 class Inference(): 
     # Pass in a yolo class and model path
-    def __init__(self, yolo: Type[object], model_path: str = 'model/yolo/TrainedCTCIMATModels/CTCIMAT.onnx', super_res_model_path: str = None, super_res_config_path: str = None, ARDUINO_PORT: str = '/dev/cu.usbmodem21401'):
+    def __init__(self, yolo: Type[object], model_path: str = 'model/yolo/TrainedCTCIMATModels/CTCIMAT.onnx', super_res_model_path: str = None, super_res_config_path: str = None, ARDUINO_PORT: str = '/dev/cu.usbmodem21401', PERSON_WIDTH: float = 0.44, FOCAL_LENGTH: float = 26 * 480 / 6.4):
         self.yolo = yolo
         self.model = YOLO(model_path)
         self.CLASSES = yolo.CLASSES
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        # Focal length & distance
+        self.PERSON_WIDTH = PERSON_WIDTH
+        self.FOCAL_LENGTH = FOCAL_LENGTH #focal_mm * image_width_px / sensor_width_mm (smartphone)
 
         # Optional Super Resolution models
         if 'LapSRN' in super_res_model_path:
@@ -123,13 +127,16 @@ class Inference():
         # Boolean to ensure only youtube_light opens once
         self.youtube_opened: bool = False
         
-    def predict(self, video_src: int = 0, score_threshold: float = 0.2, iou_threshold: float = 0.5, max_boxes: int = 10, zoom: int = 1, resolution: Union[Tuple[int, int], None] = None, use_webcam: bool = False, 
+    def predict(self, video_src: int = 0, score_threshold: float = 0.2, iou_threshold: float = 0.5, max_boxes: int = 10, zoom: int = 1, resolution: Union[Tuple[int, int], None] = None, use_webcam: bool = False, use_usb_webcam: bool = False,
                 use_super_res: bool = False, super_res_model: str = None,
                 use_sound: bool = True, use_arduino: bool = False, use_youtube_light: bool = False):
         '''
         This function runs live inference on a connected camera (default: webcam) with optional Super Resolution
         '''
         if use_webcam:
+            if use_usb_webcam:
+                capture = cv2.VideoCapture(1)
+
             if resolution is None:
                 capture = cv2.VideoCapture(f'http://192.168.205.149:8080/video') #IP when connected to hotspot data
             else:
@@ -259,7 +266,8 @@ class Inference():
         upscaled_img = self.SuperRes.upscale_worker(frame)
         return upscaled_img
     
-    def video_predict(self, video_path: str = 'tests/cyclist_vid1.mp4', output_dir: str = 'tests'):
+    def video_predict(self, input_dir: str = 'tests', video_name: str = 'cyclist_vid1', file_type: str = ".mp4", output_dir: str = 'tests'):
+        video_path = input_dir + '/' + video_name + file_type
         capture = cv2.VideoCapture(video_path)
 
         if not capture.isOpened():
@@ -272,7 +280,7 @@ class Inference():
         frame_height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
         # Output video writer
-        output_path = f"{output_dir}/output.mp4"
+        output_path = f"{output_dir}/{video_name}_output.mp4"
         fourcc = cv2.VideoWriter_fourcc(*'mp4v') # Codec
         out = cv2.VideoWriter(output_path, fourcc, fps, (frame_width, frame_height))
 
@@ -287,9 +295,9 @@ class Inference():
 
             # Process detection results
             for prediction in predictions:
-                boxes = prediction.boxes.xyxy.cpu().numpy()  # Get bounding boxes
-                scores = prediction.boxes.conf.cpu().numpy()  # Get confidence scores
-                classes = prediction.boxes.cls.cpu().numpy() # bboxes
+                boxes = prediction.boxes.xyxy.cpu().numpy()  # bboxes
+                scores = prediction.boxes.conf.cpu().numpy()  # confidence scores
+                classes = prediction.boxes.cls.cpu().numpy() # classes
 
                 # Draw bounding boxes
                 self.draw_boxes(frame, boxes, scores, classes)
@@ -330,16 +338,21 @@ class Inference():
                 colors = self.generate_colors(self.CLASSES)
                 colors = list(map(lambda x: (int(x[2] * 255), int(x[1] * 255), int(x[0] * 255)), colors))  # Convert to BGR for OpenCV
                 
+                # Calculate distance
+                WIDTH_PX = x2 - x1
+                distance: str = f'Distance: {round(self.PERSON_WIDTH * self.FOCAL_LENGTH / (WIDTH_PX * 10), 1)}m'
+
                 # Draw bounding box
                 frame = cv2.rectangle(frame, (x1, y1), (x2, y2), colors[int(cls)], thickness=2*2)
-                cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5*1.75, colors[int(cls)], thickness=3)
+                cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5*1.25, colors[int(cls)], thickness=2) #Label
+                cv2.putText(frame, distance, (x1, y1 - 27), cv2.FONT_HERSHEY_SIMPLEX, 0.5*1.25, colors[int(cls)], thickness=2) #Distance
 
         return frame
 
 if __name__ == '__main__':
     yolo = YOLO_Detection()
     inference = Inference(yolo=yolo, model_path='model/yolo/TrainedCTCIMATModels/CTCIMAT.onnx', super_res_model_path='model/SwiftSRGAN/model/swift_srgan_2x.pth.tar', super_res_config_path=None)
-    inference.predict(video_src=0, score_threshold=0.40, iou_threshold=0.5, max_boxes=10, zoom=1, resolution=(1080, 720), use_webcam=True, 
-                      use_super_res=False, super_res_model='SwiftSRGAN', 
-                      use_sound=False, use_arduino=False, use_youtube_light=True)
-    # inference.video_predict()
+    # inference.predict(video_src=0, score_threshold=0.40, iou_threshold=0.5, max_boxes=10, zoom=1.2, resolution=(3840, 2160), use_webcam=True, use_usb_webcam=False,
+    #                   use_super_res=False, super_res_model='SwiftSRGAN', 
+    #                   use_sound=False, use_arduino=False, use_youtube_light=False)
+    inference.video_predict(input_dir='tests', video_name='IMG_7604', file_type='.mov', output_dir='tests');
