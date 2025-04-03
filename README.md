@@ -13,6 +13,9 @@ Pretrained models:
 - [ONNX](https://raw.githubusercontent.com/kseto06/Aegis/main/model/yolo/TrainedCTCIMATModels/CTCIMAT.onnx)
 - [PyTorch](https://raw.githubusercontent.com/kseto06/Aegis/main/model/yolo/TrainedCTCIMATModels/CTCIMAT.pt)
 
+---
+
+
 ### Tests & Demos:
 
 <div style="display: flex; justify-content: space-around;">
