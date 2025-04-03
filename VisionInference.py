@@ -5,7 +5,6 @@ import subprocess
 import numpy as np
 import torch
 from typing import List, Tuple, Type, Union
-from sklearn.model_selection import train_test_split
 
 import colorsys
 
@@ -27,7 +26,7 @@ from lights.youtube_light import launch_video
 # YOLO Class
 class YOLO_Detection():
     def __init__(self, model_path: str='model/yolo/yolo11n.pt'):
-        self.CLASSES: list[str] = ['cyclist', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light',
+        self.CLASSES: List[str] = ['cyclist', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light',
            'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
            'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee',
            'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard',
@@ -85,7 +84,7 @@ class YOLO_Detection():
         '''
         Non-max suppression: Select the highest-score box, overlap the box and remove boxes that overlap significantly
         '''
-        nms_detections: list = torch.ops.torchvision.nms(boxes, scores, iou_threshold)
+        nms_detections: List = torch.ops.torchvision.nms(boxes, scores, iou_threshold)
         nms_detections = nms_detections[:max_boxes]
 
         return scores[nms_detections], boxes[nms_detections], classes[nms_detections]
@@ -355,4 +354,4 @@ if __name__ == '__main__':
     # inference.predict(video_src=0, score_threshold=0.40, iou_threshold=0.5, max_boxes=10, zoom=1.2, resolution=(3840, 2160), use_webcam=True, use_usb_webcam=False,
     #                   use_super_res=False, super_res_model='SwiftSRGAN', 
     #                   use_sound=False, use_arduino=False, use_youtube_light=False)
-    inference.video_predict(input_dir='tests', video_name='IMG_7604', file_type='.mov', output_dir='tests');
+    inference.video_predict(input_dir='tests', video_name='IMG_5873', file_type='.mov', output_dir='tests')

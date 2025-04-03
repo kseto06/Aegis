@@ -12,3 +12,14 @@ Pretrained models:
 - [TensorRT](https://raw.githubusercontent.com/kseto06/Aegis/main/model/yolo/TrainedCTCIMATModels/CTCIMAT.engine)
 - [ONNX](https://raw.githubusercontent.com/kseto06/Aegis/main/model/yolo/TrainedCTCIMATModels/CTCIMAT.onnx)
 - [PyTorch](https://raw.githubusercontent.com/kseto06/Aegis/main/model/yolo/TrainedCTCIMATModels/CTCIMAT.pt)
+
+### Tests & Demos:
+
+<div style="display: flex; justify-content: space-around;">
+  <img src="docs/aegis-compressed.gif" width="200">
+  <img src="docs/test1.gif" width="400">
+  <img src="docs/test2.gif" width=400>
+  <img src="docs/test3.gif" width=400>
+  <img src="docs/test4.gif" width="400">
+  <img src="docs/test5.gif" width="400">
+</div>
