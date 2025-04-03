@@ -16,7 +16,7 @@ Pretrained models:
 ### Tests & Demos:
 
 <div style="display: flex; justify-content: space-around;">
-  <img src="docs/aegis-compressed.gif" width="600">
+  <img src="docs/aegis-compressed.gif" width="800">
   <img src="docs/test1.gif" width="200">
   <img src="docs/test2.gif" width=200>
   <img src="docs/test3.gif" width=200>
