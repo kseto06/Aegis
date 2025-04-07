@@ -17,6 +17,14 @@ from model.LapSRN.LapSRN import LapSRNInference
 from model.FastSRGAN.SRGAN import FastSRGANInference
 from model.SwiftSRGAN.SRGAN import SwiftSRGANInference
 
+# Inspect: pyfirmata fix
+import inspect
+
+if not hasattr(inspect, 'getargspec'):
+    from inspect import getfullargspec
+    inspect.getargspec = getfullargspec
+
+import pyfirmata
 from pyfirmata import Arduino, util
 import threading
 import time
@@ -94,7 +102,7 @@ class Inference():
     # Pass in a yolo class and model path
     def __init__(self, yolo: Type[object], model_path: str = 'model/yolo/TrainedCTCIMATModels/CTCIMAT.onnx', 
                 super_res_model_path: str = None, super_res_config_path: str = None, 
-                ARDUINO_PORT: str = '/dev/cu.usbmodem2101', PERSON_WIDTH: float = 0.44, 
+                ARDUINO_PORT: str = '/dev/cu.usbmodem101', PERSON_WIDTH: float = 0.44, 
                 FOCAL_LENGTH: float = 26 * 480 / 6.4):
         self.yolo = yolo
         self.model = YOLO(model_path)
@@ -123,7 +131,7 @@ class Inference():
             self.cyclist_detected = False
             self.last_detection_time = 0
             self.flash_duration = 10  # seconds to flash after detection
-            self.flash_interval = 0.5  # 500ms for 2Hz flashing
+            self.flash_interval = 0.25 # 500ms for 2Hz flashing
             self.led_state = False
             self.led_lock = threading.Lock()
     
@@ -185,7 +193,7 @@ class Inference():
             except Exception as e:
                 print(f"LED control error: {str(e)}")
                 # Attempt to recover connection
-                self.initialize_arduino('/dev/cu.usbmodem2101')
+                self.initialize_arduino('/dev/cu.usbmodem101')
 
     def _led_flasher(self):
         """Dedicated LED flashing thread"""
@@ -338,20 +346,20 @@ class Inference():
             except Exception as e:
                 print(f"Error launching video: {e}")
 
-        # Arduino light:
-        def _action_thread():
-            self.last_detection_time = time.time()
-            self.board.digital[self.led_pin].write(1) # Turning on the LED before the loop
+        # # Arduino light:
+        # def _action_thread():
+        #     self.last_detection_time = time.time()
+        #     self.board.digital[self.led_pin].write(1) # Turning on the LED before the loop
 
-            while time.time() - self.last_detection_time < 10: # Keep the light on for 10s on detection
-                time.sleep(1)
+        #     while time.time() - self.last_detection_time < 10: # Keep the light on for 10s on detection
+        #         time.sleep(1)
             
-            self.board.digital[self.led_pin].write(0) # Turning off the LED after the loop
+        #     self.board.digital[self.led_pin].write(0) # Turning off the LED after the loop
 
-        if self.board is None or not use_arduino:
-            return 
-        else:
-            threading.Thread(target=_action_thread, daemon=True).start()
+        # if self.board is None or not use_arduino:
+        #     return 
+        # else:
+        #     threading.Thread(target=_action_thread, daemon=True).start()
 
     def super_res_worker(self, frame: MatLike, queue: multiprocessing.Queue):
         upscaled_img = self.SuperRes.upscale_worker(frame)
