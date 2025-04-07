@@ -92,7 +92,10 @@ class YOLO_Detection():
 # Running cyclist inference
 class Inference(): 
     # Pass in a yolo class and model path
-    def __init__(self, yolo: Type[object], model_path: str = 'model/yolo/TrainedCTCIMATModels/CTCIMAT.onnx', super_res_model_path: str = None, super_res_config_path: str = None, ARDUINO_PORT: str = '/dev/cu.usbmodem21401', PERSON_WIDTH: float = 0.44, FOCAL_LENGTH: float = 26 * 480 / 6.4):
+    def __init__(self, yolo: Type[object], model_path: str = 'model/yolo/TrainedCTCIMATModels/CTCIMAT.onnx', 
+                super_res_model_path: str = None, super_res_config_path: str = None, 
+                ARDUINO_PORT: str = '/dev/cu.usbmodem2101', PERSON_WIDTH: float = 0.44, 
+                FOCAL_LENGTH: float = 26 * 480 / 6.4):
         self.yolo = yolo
         self.model = YOLO(model_path)
         self.CLASSES = yolo.CLASSES
@@ -116,15 +119,93 @@ class Inference():
         subprocess.Popen(["gcc", "./arduino/Sound.c", "-o", "./arduino/Sound"])
 
         try:
-            self.board = Arduino(ARDUINO_PORT)
-            self.led_pin = 13
+            # LED control variables
+            self.cyclist_detected = False
             self.last_detection_time = 0
+            self.flash_duration = 10  # seconds to flash after detection
+            self.flash_interval = 0.5  # 500ms for 2Hz flashing
+            self.led_state = False
+            self.led_lock = threading.Lock()
+    
+            # Initialize Arduino connection with robust LED control
+            self.board = None
+            self.initialize_arduino(ARDUINO_PORT)
         except Exception as e:
             print("Arduino initialization failed: ", e)
             self.board = None
 
         # Boolean to ensure only youtube_light opens once
         self.youtube_opened: bool = False
+
+    def initialize_arduino(self, port):
+        """Robust Arduino initialization with guaranteed LED off state"""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                self.board = Arduino(port)
+                print(f"Arduino connection attempt {attempt + 1} successful")
+                
+                # Using pin 8 with external LED (not built-in pin 13)
+                self.led_pin = 8
+                
+                # Force set pin mode and initial state
+                with self.led_lock:
+                    self.board.digital[self.led_pin].mode = pyfirmata.OUTPUT
+                    for _ in range(5):  # Redundant writes to ensure OFF state
+                        self.board.digital[self.led_pin].write(0)
+                        time.sleep(0.1)
+                
+                # Start iterator thread
+                self.it = util.Iterator(self.board)
+                self.it.start()
+                
+                # Verify LED state
+                time.sleep(1)
+                print("Arduino initialized - LED should be OFF")
+                return
+                
+            except Exception as e:
+                print(f"Connection attempt {attempt + 1} failed: {str(e)}")
+                if attempt == max_retries - 1:
+                    print("Max connection attempts reached, Arduino functionality disabled")
+                    self.board = None
+                time.sleep(1)
+
+    def _control_led(self, state):
+        """Thread-safe LED control with verification"""
+        if not self.board:
+            return
+            
+        with self.led_lock:
+            try:
+                self.board.digital[self.led_pin].write(state)
+                self.led_state = state
+                # Small delay to allow hardware to respond
+                time.sleep(0.02)
+            except Exception as e:
+                print(f"LED control error: {str(e)}")
+                # Attempt to recover connection
+                self.initialize_arduino('/dev/cu.usbmodem2101')
+
+    def _led_flasher(self):
+        """Dedicated LED flashing thread"""
+        while True:
+            if self.cyclist_detected:
+                start_time = time.time()
+                while time.time() - start_time < self.flash_duration and self.cyclist_detected:
+                    # 2Hz flashing (500ms on, 500ms off)
+                    self._control_led(1)
+                    time.sleep(self.flash_interval)
+                    self._control_led(0)
+                    time.sleep(self.flash_interval)
+                
+                # Ensure LED is off after flashing period
+                self._control_led(0)
+                self.cyclist_detected = False
+            else:
+                # Ensure LED stays off when no detection
+                self._control_led(0)
+                time.sleep(0.1)
         
     def predict(self, video_src: int = 0, score_threshold: float = 0.2, iou_threshold: float = 0.5, max_boxes: int = 10, zoom: int = 1, resolution: Union[Tuple[int, int], None] = None, use_webcam: bool = False, use_usb_webcam: bool = False,
                 use_super_res: bool = False, super_res_model: str = None,
@@ -132,6 +213,11 @@ class Inference():
         '''
         This function runs live inference on a connected camera (default: webcam) with optional Super Resolution
         '''
+        if use_arduino:
+            # Start LED control thread
+            led_thread = threading.Thread(target=self._led_flasher, daemon=True)
+            led_thread.start()
+        
         if use_webcam:
             if use_usb_webcam:
                 capture = cv2.VideoCapture(1)
@@ -211,24 +297,30 @@ class Inference():
             prediction = self.model(frame)
 
             # Draw the bounding boxes
-            # self.plot_bboxes(prediction);
             scores: np.ndarray = prediction[0].boxes.conf.numpy() # probabilities
             classes: np.ndarray = prediction[0].boxes.cls.numpy() # predicted classes
             boxes: np.ndarray = prediction[0].boxes.xyxy.numpy() # bboxes
-            # self.draw_boxes(prediction[0].orig_img, frame, scores, classes, boxes, self.CLASSES, self.generate_colors(self.CLASSES), score_threshold)
-            self.draw_boxes(prediction[0].orig_img, boxes, scores, classes, score_threshold)
+            current_detection = any(int(cls) == 0 and score >= score_threshold 
+                                  for cls, score in zip(classes, scores))
+            
+            if current_detection:
+                if not self.cyclist_detected:
+                    self.last_detection_time = time.time()
+                    print("Cyclist detected - activating LED flash")
+                self.cyclist_detected = True
 
-            # Alert system on prediction
-            if len(prediction[0].boxes) > 0:
-                self.action(use_sound, use_arduino, use_youtube_light)
+            self.draw_boxes(frame, boxes, scores, classes, score_threshold)
 
             cv2.imshow("Cyclist Detection", frame)
-
-            if (cv2.waitKey(1) & 0xFF == ord('q')):
+            if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
-                
+
+        # Cleanup
         capture.release()
         cv2.destroyAllWindows()
+        self._control_led(0)  # Ensure LED is off
+        if self.board:
+            self.board.exit()
 
     def action(self, use_sound: bool = True, use_arduino: bool = False, use_youtube_light = False):
         '''
@@ -351,7 +443,7 @@ class Inference():
 if __name__ == '__main__':
     yolo = YOLO_Detection()
     inference = Inference(yolo=yolo, model_path='model/yolo/TrainedCTCIMATModels/CTCIMAT.onnx', super_res_model_path='model/SwiftSRGAN/model/swift_srgan_2x.pth.tar', super_res_config_path=None)
-    # inference.predict(video_src=0, score_threshold=0.40, iou_threshold=0.5, max_boxes=10, zoom=1.2, resolution=(3840, 2160), use_webcam=True, use_usb_webcam=False,
-    #                   use_super_res=False, super_res_model='SwiftSRGAN', 
-    #                   use_sound=False, use_arduino=False, use_youtube_light=False)
-    inference.video_predict(input_dir='tests', video_name='IMG_5873', file_type='.mov', output_dir='tests')
+    inference.predict(video_src=0, score_threshold=0.40, iou_threshold=0.5, max_boxes=10, zoom=1.2, resolution=(3840, 2160), use_webcam=True, use_usb_webcam=False,
+                      use_super_res=False, super_res_model='SwiftSRGAN', 
+                      use_sound=False, use_arduino=True, use_youtube_light=False)
+    # inference.video_predict(input_dir='tests', video_name='IMG_5873', file_type='.mov', output_dir='tests')
