@@ -1,3 +1,8 @@
+## Read the full article in my website: [kadenseto.vercel.app](https://kadenseto.vercel.app)
+
+And navigate to the Aegis article through: 
+- Projects --> Aegis
+
 ### Metrics:
 
 - Speed: 0.8ms preprocess, 2.7ms inference, 0.0ms loss, 4.2ms postprocess per image
@@ -15,7 +20,6 @@ Pretrained models:
 
 ---
 
-
 ### Tests & Demos:
 
 <div style="display: flex; justify-content: space-around;">
@@ -25,4 +29,6 @@ Pretrained models:
   <img src="docs/test3.gif" width=200>
   <img src="docs/test4.gif" width="200">
   <img src="docs/test5.gif" width="200">
+  <br><br>
+  <img src="docs/aegis-demo.mp4" width="500">
 </div>
