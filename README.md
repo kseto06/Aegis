@@ -29,8 +29,6 @@ Pretrained models:
   <img src="docs/test3.gif" width=200>
   <img src="docs/test4.gif" width="200">
   <img src="docs/test5.gif" width="200">
-  <br><br>
-  <video width=60% height=auto controls>
-      <source src="docs/aegis-demo.mp4" type="video/mp4">
-  </video>
 </div>
+
+Watch the prototype demo here: [Aegis Demo](https://www.youtube.com/watch?v=klIUhFy4po0)
