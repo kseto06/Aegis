@@ -1,5 +1,7 @@
 <h1 align= "center">Aegis</h1>
 
+<img src="docs/aegis-poster.png"></img>
+
 Aegis is an intuitive Cyclist Detection and Arduino flashing LED system aimed to protect cyclists from right-hooking incidents in the City of Toronto that computer vision (object detection with YOLOv11-nano), Arduino, engineering design, and classical mechanics. It is prototyped to have the detection and alertion system attached to the traffic light, and it flashes and warns drivers of approaching cyclists in their blindspots starting at a certain distance (determined by a modelled kinematics problem). For edge cases such as night time darkness or camera lenses affected by certain weather conditions, this project also explores SRGAN (Super Resolution Generative Adversarial Networks) models specifically for real-time upscaling of captured frames. In particular, the [Swift-SRGAN model](https://arxiv.org/pdf/2111.14320) was researched and explored to combine existing SRGAN models with depthwise separable CNNs for real-time inference.
 
 ___
