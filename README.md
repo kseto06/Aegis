@@ -27,6 +27,7 @@ Pretrained models:
 ## Project Artifacts & Documentation:
 
 **Read the full article in this website**: [kadenseto.vercel.app](https://kadenseto.vercel.app)
+<br>
 Navigate to the Aegis article through: 
 - Projects --> Aegis
 
