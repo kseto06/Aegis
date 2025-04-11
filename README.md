@@ -50,6 +50,4 @@ ___
 
 **Light vs. Sound Proxy Testing**: [Testing](https://drive.google.com/file/d/1fOqFEju9Q5rVdqkVZoFV2H50HvQEpceI/view?usp=sharing)
 
-<br>
-
 **Prototype Demo**: [Aegis Demo](https://www.youtube.com/watch?v=klIUhFy4po0)
